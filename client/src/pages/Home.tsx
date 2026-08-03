@@ -3,7 +3,7 @@
  * Soft Glass Minimal with strong frosted glass, visible reveal stage, rich palette
  */
 import { useState, useCallback, useRef } from "react";
-import { Shuffle, Zap, Users, Star, Sparkles, RotateCcw, Trophy } from "lucide-react";
+import { Shuffle, Zap, Users, Star, Sparkles, RotateCcw, Trophy, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GlassTabs } from "@/components/GlassTabs";
 import { GlassToggle } from "@/components/GlassToggle";
@@ -21,7 +21,8 @@ export default function Home() {
   const [names, setNames] = useState("");
   const [useAnimation, setUseAnimation] = useState(true);
   const [noRepeat, setNoRepeat] = useState(false);
-  const [winner, setWinner] = useState<string | null>(null);
+  const [drawCount, setDrawCount] = useState(1);
+  const [winners, setWinners] = useState<string[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [simpleHistory, setSimpleHistory] = useState<DrawEntry[]>([]);
   const [drawnNames, setDrawnNames] = useState<string[]>([]);
@@ -58,51 +59,84 @@ export default function Home() {
 
     let available = noRepeat
       ? nameList.filter((n) => !drawnNames.includes(n))
-      : nameList;
+      : [...nameList];
+
+    const count = Math.min(drawCount, noRepeat ? available.length : nameList.length);
 
     if (available.length === 0) {
       toast.error("Todos os nomes já foram sorteados! Limpe o histórico ou ative a repetição.");
       return;
     }
 
+    if (count > available.length) {
+      toast.error(`Não há nomes suficientes. Disponível: ${available.length}, solicitado: ${count}`);
+      return;
+    }
+
     setIsDrawing(true);
-    setWinner(null);
+    setWinners([]);
     slotKeyRef.current += 1;
 
     if (!useAnimation) {
-      const w = available[Math.floor(Math.random() * available.length)];
+      // Pick multiple winners without animation
+      const picked: string[] = [];
+      const pool = noRepeat ? [...available] : nameList;
+      for (let i = 0; i < count; i++) {
+        const idx = Math.floor(Math.random() * pool.length);
+        const w = pool.splice(idx, 1)[0];
+        picked.push(w);
+      }
       setTimeout(() => {
-        setWinner(w);
+        setWinners(picked);
         setIsDrawing(false);
-        setDrawnNames((prev) => [...prev, w]);
+        if (noRepeat) {
+          setDrawnNames((prev) => [...prev, ...picked]);
+        }
         setSimpleHistory((prev) => [
-          { id: Date.now(), result: w, timestamp: new Date(), type: "simple" },
+          ...picked.map((w, i) => ({
+            id: Date.now() + i,
+            result: w,
+            timestamp: new Date(),
+            type: "simple" as const,
+            extra: count > 1 ? `Sorteio ${i + 1}/${count}` : undefined,
+          })),
           ...prev,
         ]);
         triggerConfetti();
       }, 200);
     }
-  }, [names, noRepeat, drawnNames, useAnimation]);
+  }, [names, noRepeat, drawnNames, useAnimation, drawCount]);
 
   const handleSlotComplete = useCallback(
     (w: string) => {
       if (!w) return;
-      setWinner(w);
-      setIsDrawing(false);
-      setDrawnNames((prev) => [...prev, w]);
-      setSimpleHistory((prev) => [
-        { id: Date.now(), result: w, timestamp: new Date(), type: "simple" },
-        ...prev,
-      ]);
-      triggerConfetti();
+      setWinners((prev) => {
+        const next = [...prev, w];
+        setIsDrawing(false);
+        if (noRepeat) {
+          setDrawnNames((prev2) => [...prev2, w]);
+        }
+        setSimpleHistory((prev2) => [
+          {
+            id: Date.now(),
+            result: w,
+            timestamp: new Date(),
+            type: "simple",
+            extra: drawCount > 1 ? `Sorteio ${next.length}/${drawCount}` : undefined,
+          },
+          ...prev2,
+        ]);
+        triggerConfetti();
+        return next;
+      });
     },
-    []
+    [noRepeat, drawCount]
   );
 
   const clearSimpleDrawn = () => {
     setDrawnNames([]);
     setSimpleHistory([]);
-    setWinner(null);
+    setWinners([]);
   };
 
   // ===== CROSS DRAW =====
@@ -229,7 +263,7 @@ export default function Home() {
               <div className="flex items-center justify-center gap-2 mb-4">
                 <Sparkles className="w-5 h-5 text-amber-500" />
                 <p className="text-sm font-semibold text-muted-foreground tracking-wider uppercase">
-                  {isDrawing ? "Sorteando..." : winner ? "Resultado" : "Área do Sorteio"}
+                  {isDrawing ? (drawCount > 1 ? `Sorteando ${drawCount} nomes...` : "Sorteando...") : winners.length > 0 ? "Resultado" : "Área do Sorteio"}
                 </p>
                 <Sparkles className="w-5 h-5 text-amber-500" />
               </div>
@@ -246,19 +280,26 @@ export default function Home() {
                   onComplete={handleSlotComplete}
                   onRunning={setIsDrawing}
                 />
-              ) : winner ? (
-                <div className="animate-in fade-in zoom-in-95 duration-300">
-                  <div className="relative inline-block">
-                    <div className="absolute -inset-4 bg-amber-400/20 rounded-full blur-xl" />
-                    <p className="relative text-5xl md:text-6xl font-extrabold tracking-tight text-amber-600">
-                      {winner}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-center gap-1 mt-3">
-                    <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                    <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                    <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                  </div>
+              ) : winners.length > 0 ? (
+                <div className="animate-in fade-in zoom-in-95 duration-300 space-y-3">
+                  {winners.map((w, i) => (
+                    <div key={i} className="relative inline-block mx-2">
+                      <div className="absolute -inset-2 bg-amber-400/15 rounded-full blur-lg" />
+                      <p className="relative text-3xl md:text-4xl font-extrabold tracking-tight text-amber-600">
+                        {drawCount > 1 && (
+                          <span className="text-sm font-bold text-muted-foreground mr-2">{i + 1}.</span>
+                        )}
+                        {w}
+                      </p>
+                    </div>
+                  ))}
+                  {winners.length > 1 && (
+                    <div className="flex items-center justify-center gap-1 mt-2">
+                      {winners.map((_, i) => (
+                        <Star key={i} className="w-4 h-4 text-amber-400 fill-amber-400" />
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -288,6 +329,28 @@ export default function Home() {
                   description="Cada nome sorteado apenas uma vez"
                 />
               </div>
+
+              {/* Multiple draw count */}
+              <div className="flex items-center gap-3 pt-2 border-t border-border">
+                <Hash className="w-4 h-4 text-muted-foreground" />
+                <label className="text-sm font-bold text-foreground">Quantos nomes sortear:</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={noRepeat ? nameCount : 50}
+                  value={drawCount}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    if (!isNaN(val) && val >= 1) {
+                      setDrawCount(Math.min(val, noRepeat ? nameCount : 50));
+                    }
+                  }}
+                  className="w-20 h-9 rounded-lg border border-border bg-white/50 px-3 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-300 transition-all"
+                />
+                <span className="text-xs text-muted-foreground">
+                  {noRepeat && `(${Math.max(0, nameCount - drawnNames.length)} disponíveis)`}
+                </span>
+              </div>
             </div>
 
             {/* Names Input */}
@@ -311,7 +374,7 @@ export default function Home() {
             </Button>
 
             {/* Drawn count indicator */}
-            {noRepeat && drawnNames.length > 0 && (
+            {drawnNames.length > 0 && (
               <div className="glass-card-solid rounded-xl px-4 py-3 flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
                   <span className="font-semibold text-foreground">{drawnNames.length}</span> de{" "}
