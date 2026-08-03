@@ -35,7 +35,8 @@ export default function Home() {
   const [crossWinner2, setCrossWinner2] = useState<string | null>(null);
   const [crossIsDrawing, setCrossIsDrawing] = useState(false);
   const [crossHistory, setCrossHistory] = useState<DrawEntry[]>([]);
-  const [drawnPairs, setDrawnPairs] = useState<string[]>([]);
+  const [drawnNamesT1, setDrawnNamesT1] = useState<string[]>([]);
+  const [drawnNamesT2, setDrawnNamesT2] = useState<string[]>([]);
 
   // ===== HELPERS =====
   const getNamesList = (text: string): string[] =>
@@ -118,21 +119,16 @@ export default function Home() {
       return;
     }
 
-    let availablePairs: { n1: string; n2: string }[] = [];
-    const allPairs = list1.flatMap((n1) =>
-      list2.map((n2) => ({ n1, n2 }))
-    );
+    // When no-repeat: filter out names already drawn from either table
+    const availableList1 = crossNoRepeat
+      ? list1.filter((n) => !drawnNamesT1.includes(n))
+      : list1;
+    const availableList2 = crossNoRepeat
+      ? list2.filter((n) => !drawnNamesT2.includes(n))
+      : list2;
 
-    if (crossNoRepeat) {
-      availablePairs = allPairs.filter(
-        (p) => !drawnPairs.includes(`${p.n1}|${p.n2}`)
-      );
-    } else {
-      availablePairs = allPairs;
-    }
-
-    if (availablePairs.length === 0) {
-      toast.error("Todas as combinações já foram sorteadas! Limpe o histórico ou ative a repetição.");
+    if (availableList1.length === 0 || availableList2.length === 0) {
+      toast.error("Todos os nomes de uma das tabelas já foram sorteados! Limpe o histórico ou ative a repetição.");
       return;
     }
 
@@ -141,15 +137,17 @@ export default function Home() {
     setCrossWinner2(null);
 
     setTimeout(() => {
-      const pick = availablePairs[Math.floor(Math.random() * availablePairs.length)];
-      setCrossWinner1(pick.n1);
-      setCrossWinner2(pick.n2);
+      const pick1 = availableList1[Math.floor(Math.random() * availableList1.length)];
+      const pick2 = availableList2[Math.floor(Math.random() * availableList2.length)];
+      setCrossWinner1(pick1);
+      setCrossWinner2(pick2);
       setCrossIsDrawing(false);
-      setDrawnPairs((prev) => [...prev, `${pick.n1}|${pick.n2}`]);
+      setDrawnNamesT1((prev) => [...prev, pick1]);
+      setDrawnNamesT2((prev) => [...prev, pick2]);
       setCrossHistory((prev) => [
         {
           id: Date.now(),
-          result: `${pick.n1} + ${pick.n2}`,
+          result: `${pick1} + ${pick2}`,
           timestamp: new Date(),
           type: "cross",
         },
@@ -157,10 +155,11 @@ export default function Home() {
       ]);
       triggerConfetti();
     }, useAnimation ? 3000 : 200);
-  }, [table1Names, table2Names, crossNoRepeat, drawnPairs, useAnimation]);
+  }, [table1Names, table2Names, crossNoRepeat, drawnNamesT1, drawnNamesT2, useAnimation]);
 
   const clearCrossDrawn = () => {
-    setDrawnPairs([]);
+    setDrawnNamesT1([]);
+    setDrawnNamesT2([]);
     setCrossHistory([]);
     setCrossWinner1(null);
     setCrossWinner2(null);
@@ -414,8 +413,8 @@ export default function Home() {
               <GlassToggle
                 checked={crossNoRepeat}
                 onCheckedChange={setCrossNoRepeat}
-                label="Sem repetir combinações"
-                description="Cada par de nomes sorteado apenas uma vez"
+                label="Sem repetir nomes"
+                description="Nomes já sorteados ficam fora do próximo sorteio"
               />
             </div>
 
@@ -454,12 +453,14 @@ export default function Home() {
               {crossIsDrawing ? "Sorteando..." : "Sortear Par"}
             </Button>
 
-            {/* Drawn pairs count */}
-            {crossNoRepeat && drawnPairs.length > 0 && (
+            {/* Drawn names count */}
+            {crossNoRepeat && (drawnNamesT1.length > 0 || drawnNamesT2.length > 0) && (
               <div className="glass-card-solid rounded-xl px-4 py-3 flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
-                  <span className="font-semibold text-foreground">{drawnPairs.length}</span>{" "}
-                  combinações já sorteadas
+                  <span className="font-semibold text-foreground">{drawnNamesT1.length}</span> de{" "}
+                  <span className="font-semibold text-foreground">{t1Count}</span> (T1) e{" "}
+                  <span className="font-semibold text-foreground">{drawnNamesT2.length}</span> de{" "}
+                  <span className="font-semibold text-foreground">{t2Count}</span> (T2) já sorteados
                 </span>
                 <Button
                   variant="ghost"
